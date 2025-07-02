@@ -1,4 +1,4 @@
-### 🚀 Setup Instructions
+# 🚀 Setup Instructions
 ## 1. 📥 Install Requirements
 
 First, install the required Python packages:
