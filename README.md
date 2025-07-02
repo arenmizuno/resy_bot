@@ -1,9 +1,9 @@
 ### 🚀 Setup Instructions
 ## 1. 📥 Install Requirements
 
-\n First, install the required Python packages:
+First, install the required Python packages:
 
-\npip install -r requirements.txt
+pip install -r requirements.txt
 
 ## 2. 🔐 Generate a Gmail App Password
 
