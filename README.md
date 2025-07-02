@@ -3,7 +3,7 @@
 
 First, install the required Python packages:
 
-pip install -r requirements.txt
+<pre> pip install -r requirements.txt </pre>
 
 ## 2. 🔐 Generate a Gmail App Password
 
