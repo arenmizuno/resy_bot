@@ -18,6 +18,7 @@ Copy the 16-character password provided.
 Create a .env file in the root of the project to securely store your credentials:
 
 <pre> touch .env </pre>
+<pre> open -a TextEdit .env </pre>
 
 Add the following lines, replacing the placeholders with your actual values:
 
