@@ -39,4 +39,4 @@ RECEIVER_EMAIL=recipient_email_for_alerts
 
 Run it like this:
 
-echo '57 11 21 4 * cd /Users/aren/Desktop/resy-bot && /opt/anaconda3/bin/python resy_bot.py --restaurant-name "The Duck Inn" --restaurant-url "https://resy.com/cities/chicago-il/venues/the-duck-inn" --date 2026-04-28 --guests 4 >> /Users/aren/Desktop/resy-bot/cron.log 2>&1 ; crontab -l | grep -v "resy_bot.py" | crontab -' | crontab -
+echo '57 11 21 4 * cd /Users/aren/Desktop/resy-bot && /opt/anaconda3/bin/python resy_bot.py --restaurant-name "The Duck Inn" --restaurant-url "https://resy.com/cities/chicago-il/venues/the-duck-inn" --date 2026-04-28 --guests 4 --times "7:00 PM" "7:15 PM" "6:45 PM" >> /Users/aren/Desktop/resy-bot/cron.log 2>&1 ; crontab -l | grep -v "resy_bot.py" | crontab -' | crontab -
