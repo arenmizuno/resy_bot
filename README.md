@@ -35,3 +35,13 @@ RECEIVER_EMAIL=recipient_email_for_alerts
 </pre>
 
 🔒 Do not commit your .env file to Git. Add it to your .gitignore.
+
+
+Run it like this:
+
+python resy_bot.py \
+  --restaurant-name "The Duck Inn" \
+  --restaurant-url "https://resy.com/cities/chicago-il/venues/the-duck-inn" \
+  --date 2026-04-28 \
+  --guests 4 \
+  --times "7:00 PM" "7:15 PM" "6:45 PM"
