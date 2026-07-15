@@ -1,2 +1,5 @@
 selenium>=4.0.0
 python-dotenv
+flask>=3.0.0
+# Optional fallback if OpenTable/Resy start blocking plain Selenium:
+# undetected-chromedriver

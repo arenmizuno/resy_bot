@@ -1,149 +1,153 @@
-# Resy Reservation Bot
+# Reservation Bot (Resy + OpenTable)
 
-## Overview
+Queue restaurant reservations from a small local web page, and let a cron-driven
+poller book them automatically on **Resy** or **OpenTable** — whether the table
+is already open (grab it now / catch cancellations) or drops in the future.
 
-This project is an automated reservation bot for Resy. It logs into a user account, navigates to a restaurant page, selects a date, number of guests, and preferred times, and attempts to book a reservation. If successful (or if an error occurs), the bot sends an email notification.
+For each request you set:
 
-I built this because I enjoy trying new restaurants and optimizing the process of getting reservations. I am active on Beli (username: **zuno**), and this project was a way to combine that interest with automation and practical engineering.
+- **Start time** *(optional)* — when to begin trying. Blank = start immediately.
+- **Retry interval** — how often to re-attempt (default every 2 hours), so it keeps
+  trying to catch cancellations.
+- **± Window** — book any open slot within this many hours of your desired time
+  (e.g. desired 7:00 PM, window 2h → anything 5:00–9:00 PM).
+- **Run until reservation** — by default the bot **stops trying 2 days before**
+  the reservation; check this to keep trying right up to the reservation time.
 
 ---
 
-## Setup Instructions
+## How it works
 
-### 1. Install Requirements
+```
+bot/
+  config.py        env + paths + defaults
+  store.py         JSON request store (file-locked) shared by web + poller
+  timing.py        when to attempt / when to give up (pure datetime math)
+  matching.py      parse slot times, pick closest within ± window
+  driver.py        shared Selenium Chrome (persistent profile)
+  notify.py        email alerts
+  providers/
+    base.py        BookingProvider interface
+    resy.py        Resy flow
+    opentable.py   OpenTable flow
+  web.py           local web UI (add/view/cancel/try-now)
+  poller.py        cron entrypoint — attempts all due requests
+resy_bot.py        legacy one-off CLI (still works)
+requests.json      your queued requests (gitignored)
+```
+
+The **web UI** and the **poller** both read/write `requests.json`. You add
+requests in the browser; cron runs the poller every minute; the poller attempts
+only the requests that are due (start time reached, retry interval elapsed, and
+before the give-up deadline).
+
+---
+
+## Setup
+
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
+You also need Google Chrome installed (Selenium 4 auto-manages the driver).
 
-### 2. Generate a Gmail App Password
-
-1. Go to: https://myaccount.google.com/apppasswords  
-2. Generate a new App Password  
-3. Copy the 16-character password  
-
----
-
-### 3. Create and Configure `.env` File
-
-```bash
-touch .env
-open -a TextEdit .env
-```
-
-Add:
+### 2. Configure `.env`
 
 ```env
+# Resy login
 RESY_EMAIL=your_resy_login_email
 RESY_PASSWORD=your_resy_password
 
+# OpenTable login
+OPENTABLE_EMAIL=your_opentable_email
+OPENTABLE_PASSWORD=your_opentable_password
+
+# Gmail alerts (use a Gmail App Password: https://myaccount.google.com/apppasswords)
 SENDER_EMAIL=your_gmail_email
 SENDER_PASSWORD=your_16_character_app_password
-
 RECEIVER_EMAIL=recipient_email_for_alerts
+
+# Optional
+# HEADLESS=1                 # run Chrome headless in the poller
+# WEB_PORT=5001
 ```
 
-Do not commit this file. Add `.env` to `.gitignore`.
+`.env`, `requests.json`, and the Chrome profile are gitignored.
+
+> **First run:** launch the poller (or the CLI) once so Chrome logs into Resy /
+> OpenTable using your credentials. The login is saved in the persistent Chrome
+> profile (`.chrome-profile/`), so later runs skip login and are less likely to
+> hit a CAPTCHA.
 
 ---
 
-## Scheduling a One-Time Run with cron
+## Usage
 
-### Cron Format
-
-```
-MINUTE HOUR DAY MONTH DAY_OF_WEEK
-```
-
-| Field | Meaning | Example |
-|------|--------|--------|
-| MINUTE | 0–59 | 57 |
-| HOUR | 0–23 | 11 (11 AM) |
-| DAY | 1–31 | 21 |
-| MONTH | 1–12 | 4 (April) |
-| DAY_OF_WEEK | 0–7 (`*` = any) | * |
-
----
-
-### Example Schedule
-
-```
-57 11 21 4 *
-```
-
-Runs at:
-
-**11:57 AM on April 21**
-
----
-
-### Full Cron Command (with All Parameters)
+### Manage requests (web UI)
 
 ```bash
-echo '57 11 21 4 * cd /Users/aren/Desktop/resy-bot && /opt/anaconda3/bin/python resy_bot.py \
---restaurant-name "The Duck Inn" \
---restaurant-url "https://resy.com/cities/chicago-il/venues/the-duck-inn" \
---date 2026-04-28 \
---guests 4 \
---times "7:00 PM" "7:15 PM" "6:45 PM" \
->> /Users/aren/Desktop/resy-bot/cron.log 2>&1 ; \
-crontab -l | grep -v "resy_bot.py" | crontab -' | crontab -
+python -m bot.web
+```
+
+Open **http://127.0.0.1:5001**, fill in the form (platform, restaurant name +
+URL, date, guests, desired time, window, optional start time, retry interval,
+run-until-reservation), and click **Add request**. From the table you can
+**Try now**, **Cancel**, or **Delete** any request.
+
+### Run the poller
+
+The poller does one pass and exits — it's meant to be run on a schedule:
+
+```bash
+python -m bot.poller            # attempt all due requests
+python -m bot.poller --id <id>  # force one request now, ignoring cadence
+```
+
+### Legacy one-off CLI (Resy only)
+
+```bash
+python resy_bot.py \
+  --restaurant-name "The Duck Inn" \
+  --restaurant-url "https://resy.com/cities/chicago-il/venues/the-duck-inn" \
+  --date 2026-04-28 --guests 4 --time "7:00 PM" --window-hours 2
 ```
 
 ---
 
-### Explanation of the Cron Command
+## Scheduling with cron
 
-- `57 11 21 4 *` → Run at 11:57 AM on April 21  
-- `cd /Users/aren/Desktop/resy-bot` → Navigate to project directory  
-- `/opt/anaconda3/bin/python` → Full Python path (required for cron)  
-- `resy_bot.py` → Script to run  
+**Run the poller every minute.** A frequent cron makes the bot react quickly when
+a start time passes or a table opens; the per-request 2-hour retry cadence is
+enforced inside the poller, so a fast cron does *not* over-attempt any request.
 
-#### Script Arguments:
-- `--restaurant-name` → Used in email alerts  
-- `--restaurant-url` → Restaurant page to book  
-- `--date` → Reservation date  
-- `--guests` → Number of guests  
-- `--times` → Preferred reservation times in order  
+> Why not a 2-hour cron? It can only act on 2-hour boundaries — enough to miss a
+> reservation drop by up to ~2 hours and too coarse to catch fast cancellations.
 
-#### Logging:
-- `>> cron.log 2>&1` → Saves output and errors to `cron.log`
+Add the job (this appends without wiping other crontab entries):
 
-#### Cleanup:
-- `crontab -l | grep -v "resy_bot.py" | crontab -`  
-  → Removes the job after it runs once
+```bash
+( crontab -l 2>/dev/null; \
+  echo "* * * * * cd /Users/aren/Desktop/resy-bot && /opt/anaconda3/bin/python -m bot.poller >> /Users/aren/Desktop/resy-bot/cron.log 2>&1" ) | crontab -
+```
 
----
+Check it: `crontab -l` · Watch it: `tail -f cron.log` · Remove it:
+`crontab -l | grep -v "bot.poller" | crontab -`
 
-### Important Notes
-
-- Your computer must be **awake** at runtime  
-- Cron runs jobs within the specified minute (not exact to the second)  
-- Use full paths (Python + project directory)  
+> On macOS the process running `cron` needs Full Disk / Automation permissions to
+> launch Chrome. If the poller can't open Chrome from cron, run
+> `python -m bot.poller` once in Terminal and grant the prompt.
 
 ---
 
-## Project Structure
+## Notes & caveats
 
-- `resy_bot.py` – main automation script  
-- `.env` – credentials (not committed)  
-- `requirements.txt` – dependencies  
-- `cron.log` – runtime logs  
-
----
-
-## Skills and Concepts Demonstrated
-
-- Web automation using Selenium  
-- Handling dynamic front-end behavior (React modals, delays)  
-- XPath and CSS selector design  
-- Reliable browser interaction (scrolling, waits, fallbacks)  
-- Environment variable management  
-- Email automation via SMTP  
-- CLI design with argparse  
-- Task scheduling with cron  
-- Debugging timing-sensitive workflows  
-
----
+- **OpenTable** has stronger bot detection and its page markup changes often. The
+  flow lives entirely in `bot/providers/opentable.py` with verbose logging and
+  fallback selectors, so it's easy to re-tune. If plain Selenium gets blocked,
+  `pip install undetected-chromedriver` and swap it into `bot/driver.make_driver`.
+- **CAPTCHA** on login can still appear; the persistent Chrome profile minimizes
+  re-logins. If a run hits one, the poller emails you and retries next cycle.
+- **Payment info** must already be saved on your Resy / OpenTable account — the
+  bot confirms with whatever card is on file.

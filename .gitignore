@@ -1,2 +1,9 @@
 .DS_Store
 .env
+requests.json
+requests.json.tmp
+*.lock
+.chrome-profile/
+cron.log
+__pycache__/
+*.pyc
