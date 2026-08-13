@@ -24,246 +24,336 @@ TEMPLATE = """
   <title>Resy Bot</title>
   <style>
     :root {
-      color-scheme: light dark;
+      /* OLED-first palette. There is no light variant on purpose — the whole
+         look depends on true black, and a washed-out light mode would read as
+         a different product. */
+      color-scheme: dark;
 
-      --bg-page: #f5f5f7;
-      --bg-card: rgba(255, 255, 255, 0.8);
-      --bg-inset: #ffffff;
-      --bg-hover: rgba(0, 0, 0, 0.03);
-      --text-primary: #1d1d1f;
-      /* Apple's own #86868b / #0071e3 measure 3.3:1 and 4.3:1 on this
-         background — under WCAG AA for text. Nudged darker to clear 4.5:1
-         while keeping the same character. */
-      --text-secondary: #6e6e73;
-      --accent-text: #0066cc;
-      --accent-fill: #0071e3;
-      --accent: #0071e3;
-      --accent-contrast: #ffffff;
-      --hairline: rgba(0, 0, 0, 0.08);
-      --field-border: rgba(0, 0, 0, 0.16);
-      --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.06);
+      --bg:        #000000;
+      --surface:   #0c0d0f;
+      --surface-2: #15171a;
+      --surface-3: #1e2126;
+      --line:      rgba(255, 255, 255, 0.09);
+      --line-firm: rgba(255, 255, 255, 0.18);
 
-      --tag-pending-bg: #fff4e5;   --tag-pending-fg: #8a5300;
-      --tag-booked-bg:  #e4f7e9;   --tag-booked-fg:  #14713a;
-      --tag-bad-bg:     #fdeaea;   --tag-bad-fg:     #b42318;
-      --tag-off-bg:     #eeeef0;   --tag-off-fg:     #66666b;
+      /* Against the card surface: text 20:1, dim 7.5:1, faint 4.9:1 — the two
+         greys are as dark as they can go and still clear AA for body text. */
+      --text:      #ffffff;
+      --text-dim:  #9ba1a8;
+      --text-faint:#7a8087;
 
-      --space-xs: 4px;  --space-sm: 8px;  --space-md: 16px;
-      --space-lg: 24px; --space-xl: 48px;
+      /* Accents are nudged off the source hues so each clears 4.5:1 on black
+         as text — the stock signal red is only 4:1. */
+      --go:     #00f19f;
+      --go-ink: #00110a;
+      --wait:   #ffde00;
+      --stop:   #ff3b4e;
+      --idle:   #7a8087;
 
-      --radius-card: 18px;
-      --radius-field: 12px;
-      --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
-    }
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+      --space-4: 16px; --space-5: 24px; --space-6: 32px;
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg-page: #000000;
-        --bg-card: rgba(29, 29, 31, 0.72);
-        --bg-inset: #1d1d1f;
-        --bg-hover: rgba(255, 255, 255, 0.04);
-        --text-primary: #f5f5f7;
-        --text-secondary: #98989d;
-        --accent-text: #4da2ff;
-        /* White on #0a84ff is only 3.65:1; the fill is darkened so the primary
-           button's label clears AA. The ring/checkbox keep the brighter blue. */
-        --accent-fill: #0f6fdd;
-        --accent: #0a84ff;
-        --hairline: rgba(255, 255, 255, 0.12);
-        --field-border: rgba(255, 255, 255, 0.2);
-        --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.5);
+      --radius:  10px;
+      --radius-sm: 6px;
+      --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
 
-        --tag-pending-bg: rgba(255, 159, 10, 0.16); --tag-pending-fg: #ffb340;
-        --tag-booked-bg:  rgba(48, 209, 88, 0.16);  --tag-booked-fg:  #30d158;
-        --tag-bad-bg:     rgba(255, 69, 58, 0.16);  --tag-bad-fg:     #ff6961;
-        --tag-off-bg:     rgba(255, 255, 255, 0.1); --tag-off-fg:     #98989d;
-      }
+      /* The `font` shorthand has no valid `inherit` family keyword — writing one
+         invalidates the whole declaration — so every shorthand names this. */
+      --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      background: var(--bg-page);
-      color: var(--text-primary);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
-      font: 400 17px/1.5 -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font: 400 14px/1.5 var(--sans);
       -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
     }
 
-    .wrap {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: var(--space-xl) var(--space-lg) 96px;
-      animation: fadeUp 0.5s var(--ease) both;
+    /* The one typographic move the whole layout leans on: micro labels in
+       heavy uppercase with wide tracking, data in mono underneath. */
+    .label {
+      font: 700 10px/1.4 var(--sans);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-faint);
     }
 
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(20px); }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 var(--space-5) 96px; }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
     }
+    @keyframes breathe { 50% { opacity: 0.25; } }
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; }
     }
 
-    header { margin-bottom: var(--space-xl); }
-    h1 { font: 600 32px/1.2 inherit; letter-spacing: -0.02em; margin: 0 0 var(--space-sm); }
-    .lede { font-size: 17px; color: var(--text-secondary); margin: 0; max-width: 620px; }
-
-    .card {
-      background: var(--bg-card);
-      -webkit-backdrop-filter: blur(20px);
-      backdrop-filter: blur(20px);
-      border: 1px solid var(--hairline);
-      border-radius: var(--radius-card);
-      box-shadow: var(--shadow-card);
-      padding: var(--space-lg);
-      margin-bottom: var(--space-lg);
+    /* ---------- top bar ---------- */
+    .topbar {
+      position: sticky; top: 0; z-index: 40;
+      display: flex; align-items: center; gap: var(--space-3);
+      height: 56px;
+      padding: 0 var(--space-5);
+      /* Opaque rather than blurred — the page behind it is already pure black,
+         so a backdrop-filter buys nothing and costs a compositing layer. */
+      background: var(--bg);
+      border-bottom: 1px solid var(--line);
     }
-    .card + .card { margin-top: var(--space-lg); }
-
-    h2 {
-      font: 600 13px/1.4 inherit;
+    .topbar-inner {
+      display: flex; align-items: center; gap: var(--space-3);
+      width: 100%; max-width: 1080px; margin: 0 auto;
+    }
+    .mark {
+      font: 800 13px/1 var(--sans);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-secondary);
-      margin: 0 0 var(--space-md);
+      letter-spacing: 0.22em;
     }
+    .pulse {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--idle); flex: none;
+    }
+    .pulse.live { background: var(--go); animation: breathe 2.4s ease-in-out infinite; }
+    .topbar .label { margin-left: auto; }
+
+    /* ---------- page head ---------- */
+    header { padding: var(--space-6) 0 var(--space-5); }
+    h1 {
+      font: 800 34px/1.05 var(--sans);
+      letter-spacing: -0.03em;
+      margin: var(--space-2) 0 var(--space-3);
+    }
+    .lede { font-size: 14px; color: var(--text-dim); margin: 0; max-width: 60ch; }
+
+    /* ---------- panels ---------- */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: var(--space-5);
+      margin-bottom: var(--space-5);
+      animation: rise 0.4s var(--ease) 0.06s both;
+    }
+    .panel-head {
+      display: flex; align-items: baseline; gap: var(--space-3);
+      margin-bottom: var(--space-4);
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid var(--line);
+    }
+    h2 { font: 700 12px/1.4 var(--sans); text-transform: uppercase; letter-spacing: 0.16em; margin: 0; }
+    .count { font: 700 11px/1 var(--mono); color: var(--text-faint); margin-left: auto; }
 
     /* ---------- form ---------- */
-    .field { margin-bottom: var(--space-md); }
-    .field:last-of-type { margin-bottom: 0; }
-    label {
-      display: block;
-      font: 600 13px/1.4 inherit;
-      margin-bottom: 6px;
+    .field { margin-bottom: var(--space-4); }
+    label { display: block; margin-bottom: 6px; }
+    .field > label {
+      font: 700 10px/1.4 var(--sans);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-dim);
     }
-    label .hint { font-weight: 400; color: var(--text-secondary); }
+    .field > label .hint { color: var(--text-faint); letter-spacing: 0.1em; }
 
     input, select {
       width: 100%;
       min-height: 44px;
-      padding: 0 14px;
-      font: 400 17px/1.4 inherit;
-      color: var(--text-primary);
-      background: var(--bg-inset);
-      border: 1px solid var(--field-border);
-      border-radius: var(--radius-field);
-      transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+      padding: 0 12px;
+      font: 400 15px/1.4 var(--sans);
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--line-firm);
+      border-radius: var(--radius-sm);
+      transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
     }
+    /* Under 16px iOS zooms the page on focus. */
+    @media (max-width: 760px) { input, select { font-size: 16px; } }
+    input:hover, select:hover { border-color: rgba(255, 255, 255, 0.3); }
     input:focus, select:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+      outline: 2px solid var(--go);
+      outline-offset: 2px;
+      border-color: var(--go);
+      background: var(--surface-3);
     }
-    input::placeholder { color: var(--text-secondary); }
+    input::placeholder { color: var(--text-faint); }
+    input[type="date"], input[type="datetime-local"] { font-family: var(--mono); font-size: 14px; }
 
-    .row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: var(--space-md);
-    }
-    @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
+    .row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); margin-bottom: var(--space-4); }
+    /* The grid gap already spaces these; leaving the field margin on would
+       double it once the columns stack. */
+    .row > .field { margin-bottom: 0; }
+    @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
 
     /* A 20px checkbox is well under the 44px touch target, so the whole row is
        the label — click anywhere on it to toggle. */
     .switch {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-height: 44px;
-      margin: 0;
-      font-weight: 400;
+      display: flex; align-items: center; gap: 10px;
+      min-height: 44px; margin: 0;
+      align-self: end;
+      font: 600 13px/1.3 var(--sans);
       cursor: pointer;
     }
-    .switch input { width: 20px; height: 20px; min-height: 0; accent-color: var(--accent); cursor: pointer; }
+    .switch input { width: 20px; height: 20px; min-height: 0; accent-color: var(--go); cursor: pointer; }
 
     .actions-bar {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: var(--space-lg);
-      padding-top: var(--space-lg);
-      border-top: 1px solid var(--hairline);
+      display: flex; justify-content: flex-end;
+      margin-top: var(--space-5); padding-top: var(--space-4);
+      border-top: 1px solid var(--line);
     }
 
     /* ---------- buttons ---------- */
     button {
-      font: 500 15px/1 inherit;
-      border: 0;
-      border-radius: 980px;
+      font: 700 11px/1 var(--sans);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      min-height: 44px;
-      padding: 0 24px;
+      min-height: 40px;
+      padding: 0 18px;
       white-space: nowrap;
-      transition: transform 0.2s var(--ease), filter 0.2s var(--ease), background 0.2s var(--ease);
+      transition: background 0.18s var(--ease), color 0.18s var(--ease),
+                  border-color 0.18s var(--ease), transform 0.12s var(--ease);
     }
-    button:active { transform: scale(0.98); }
-    button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    @media (max-width: 760px) { button { min-height: 44px; } }
+    button:active { transform: scale(0.97); }
+    button:focus-visible { outline: 2px solid var(--go); outline-offset: 2px; }
 
-    .btn-primary { background: var(--accent-fill); color: var(--accent-contrast); }
-    .btn-primary:hover { transform: scale(1.02); filter: brightness(1.08); }
+    .btn-primary { background: var(--go); color: var(--go-ink); padding: 0 28px; }
+    .btn-primary:hover { background: #4dffc0; }
 
     .btn-quiet {
       background: transparent;
-      color: var(--accent-text);
+      color: var(--text-dim);
+      border-color: var(--line-firm);
       padding: 0 12px;
-      min-height: 44px;
     }
-    .btn-quiet:hover { background: var(--bg-hover); }
-    .btn-quiet.danger { color: var(--tag-bad-fg); }
+    .btn-quiet:hover { background: var(--surface-3); color: var(--text); border-color: var(--line-firm); }
+    .btn-quiet.danger { color: var(--stop); }
+    .btn-quiet.danger:hover { background: rgba(255, 59, 78, 0.12); border-color: var(--stop); }
 
-    /* ---------- table ---------- */
-    .table-scroll { overflow-x: auto; margin: 0 calc(-1 * var(--space-lg)); padding: 0 var(--space-lg); }
+    /* ---------- queue ---------- */
+    .table-scroll { overflow-x: auto; margin: 0 calc(-1 * var(--space-5)); padding: 0 var(--space-5); }
     table { width: 100%; border-collapse: collapse; }
     th {
-      font: 600 11px/1.4 inherit;
+      font: 700 10px/1.4 var(--sans);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-secondary);
+      letter-spacing: 0.16em;
+      color: var(--text-faint);
       text-align: left;
-      padding: 0 var(--space-md) var(--space-sm) 0;
+      padding: 0 var(--space-4) var(--space-3) 0;
       white-space: nowrap;
     }
     td {
-      padding: var(--space-md) var(--space-md) var(--space-md) 0;
-      border-top: 1px solid var(--hairline);
+      padding: var(--space-3) var(--space-4) var(--space-3) 0;
+      border-top: 1px solid var(--line);
       vertical-align: top;
-      font-size: 15px;
     }
-    tbody tr { transition: background 0.2s var(--ease); }
-    tbody tr:hover { background: var(--bg-hover); }
+    tbody tr { transition: background 0.18s var(--ease); }
+    tbody tr:hover { background: var(--surface-2); }
+    /* Status reads twice: as a colored edge for scanning and as a labelled
+       chip for anyone who can't use the color. */
+    tbody tr td:first-child { box-shadow: inset 3px 0 0 var(--edge, transparent); padding-left: var(--space-3); }
+    tr.pending   { --edge: var(--wait); }
+    tr.booked    { --edge: var(--go); }
+    tr.failed,
+    tr.expired   { --edge: var(--stop); }
+    tr.cancelled { --edge: var(--idle); }
     td:last-child, th:last-child { padding-right: 0; text-align: right; }
+    /* Enough room that dates, booked slots and countdowns never wrap; the
+       wrapper scrolls horizontally before any of them break. */
+    th:nth-child(1) { min-width: 170px; }
+    th:nth-child(2) { min-width: 132px; }
+    th:nth-child(5) { min-width: 150px; }
 
-    .name { font-weight: 600; }
-    .meta { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
-    .meta.err { color: var(--tag-bad-fg); }
-    .booked-slot { font-weight: 600; }
-    a { color: var(--accent-text); text-decoration: none; }
+    .name { font: 700 15px/1.3 var(--sans); letter-spacing: -0.01em; }
+    .meta { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+    .meta.err { color: var(--stop); }
+    .mono { font-family: var(--mono); font-size: 13px; }
+    .date { font: 600 14px/1.3 var(--mono); }
+    .booked-slot { font: 700 13px/1.4 var(--sans); color: var(--go); margin-top: 2px; white-space: nowrap; }
+    .guests { font: 700 16px/1.2 var(--mono); }
+    a { color: var(--go); text-decoration: none; }
     a:hover { text-decoration: underline; }
 
+    .sched { display: grid; grid-template-columns: auto auto; gap: 3px var(--space-2); align-items: baseline; justify-content: start; }
+    .sched .label { font-size: 9px; }
+    .sched .v { font: 600 12px/1.4 var(--mono); color: var(--text-dim); white-space: nowrap; }
+    .sched .v.now { color: var(--wait); }
+
     .tag {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 980px;
-      font: 600 12px/1.3 inherit;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 9px 4px 7px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      font: 700 10px/1.3 var(--sans);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
       white-space: nowrap;
     }
-    .tag.pending   { background: var(--tag-pending-bg); color: var(--tag-pending-fg); }
-    .tag.booked    { background: var(--tag-booked-bg);  color: var(--tag-booked-fg); }
+    .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .tag.pending   { color: var(--wait); }
+    .tag.booked    { color: var(--go); }
     .tag.failed,
-    .tag.expired   { background: var(--tag-bad-bg);     color: var(--tag-bad-fg); }
-    .tag.cancelled { background: var(--tag-off-bg);     color: var(--tag-off-fg); }
+    .tag.expired   { color: var(--stop); }
+    .tag.cancelled { color: var(--idle); }
 
-    .row-actions { display: flex; gap: var(--space-xs); justify-content: flex-end; }
+    .row-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
     form.inline { margin: 0; }
 
-    .empty { padding: var(--space-xl) 0; text-align: center; color: var(--text-secondary); }
+    .empty { padding: var(--space-6) 0; text-align: center; color: var(--text-faint); }
+
+    /* Below 760px the grid collapses to stacked cards — a 6-column table can't
+       stay readable at 375px, and each row carries its own header labels. */
+    @media (max-width: 760px) {
+      h1 { font-size: 28px; }
+
+      .table-scroll { overflow-x: visible; }
+      thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      table, tbody, tr, td { display: block; width: 100%; }
+      tbody tr {
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--edge, var(--line));
+        border-radius: var(--radius-sm);
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
+      }
+      tbody tr td:first-child { box-shadow: none; padding-left: 0; }
+      td { border-top: 0; padding: var(--space-2) 0; }
+      td + td { border-top: 1px solid var(--line); }
+      td::before {
+        content: attr(data-label);
+        display: block;
+        font: 700 9px/1.4 var(--sans);
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+        color: var(--text-faint);
+        margin-bottom: 4px;
+      }
+      td:last-child { text-align: left; }
+      td:last-child::before { content: none; }
+      .row-actions { justify-content: flex-start; flex-wrap: wrap; }
+    }
   </style>
 </head>
 <body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="pulse {{ 'live' if pending else '' }}" aria-hidden="true"></span>
+    <span class="mark">Resy Bot</span>
+    <span class="label">{{ 'Polling' if pending else 'Idle' }}</span>
+  </div>
+</div>
+
 <div class="wrap">
 
   <header>
+    <span class="label">Reservation engine</span>
     <h1>Resy Bot</h1>
     <p class="lede">
       Queue a table and the poller keeps trying — from your start time, every retry interval,
@@ -271,8 +361,8 @@ TEMPLATE = """
     </p>
   </header>
 
-  <form class="card" method="post" action="{{ url_for('add') }}">
-    <h2>New request</h2>
+  <form class="panel" method="post" action="{{ url_for('add') }}">
+    <div class="panel-head"><h2>New request</h2></div>
 
     <div class="field">
       <label for="restaurant_url">Restaurant URL</label>
@@ -326,8 +416,11 @@ TEMPLATE = """
     </div>
   </form>
 
-  <div class="card">
-    <h2>Queue</h2>
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Queue</h2>
+      <span class="count">{{ total }} total</span>
+    </div>
     <div class="table-scroll">
       <table>
         <thead>
@@ -337,20 +430,20 @@ TEMPLATE = """
             <th>Party</th>
             <th>Status</th>
             <th>Schedule</th>
-            <th></th>
+            <th><span class="label">Actions</span></th>
           </tr>
         </thead>
         <tbody>
         {% for r in rows %}
-          <tr>
-            <td>
+          <tr class="{{ r.req.status }}">
+            <td data-label="Restaurant">
               <div class="name">{{ r.req.restaurant_name }}</div>
-              <div class="meta">±{{ r.window }}h · every {{ r.interval }}h</div>
+              <div class="meta mono">±{{ r.window }}h · every {{ r.interval }}h</div>
               {% if r.req.last_error %}<div class="meta err">{{ r.req.last_error[:90] }}</div>{% endif %}
             </td>
-            <td>
-              {{ r.date_label }}
-              <div class="meta">{{ r.req.desired_time }}</div>
+            <td data-label="Reservation">
+              <div class="date">{{ r.date_label }}</div>
+              <div class="meta mono">{{ r.req.desired_time }}</div>
               {% if r.req.booked_slot %}
                 <div class="booked-slot">Booked {{ r.req.booked_slot }}</div>
                 {% if r.req.verified is false %}<div class="meta">Unconfirmed — check Resy</div>{% endif %}
@@ -359,21 +452,29 @@ TEMPLATE = """
                 {% endif %}
               {% endif %}
             </td>
-            <td>{{ r.req.guests }}</td>
-            <td>
+            <td data-label="Party"><span class="guests">{{ r.req.guests }}</span></td>
+            <td data-label="Status">
               <span class="tag {{ r.req.status }}">{{ r.req.status }}</span>
-              <div class="meta">{{ r.req.attempts }} attempt{{ '' if r.req.attempts == 1 else 's' }}</div>
+              <div class="meta mono">{{ r.req.attempts }} attempt{{ '' if r.req.attempts == 1 else 's' }}</div>
             </td>
-            <td class="meta">
+            <td data-label="Schedule">
               {% if r.req.status == 'pending' %}
-                Next {{ r.next_attempt }}<br>Stops {{ r.deadline }}
+                <div class="sched">
+                  <span class="label">Next</span>
+                  <span class="v {{ 'now' if r.next_in == 'Due now' else '' }}">{{ r.next_in }}</span>
+                  <span class="label">Stops</span>
+                  <span class="v">{{ r.deadline }}</span>
+                </div>
               {% elif r.last_attempt %}
-                Tried {{ r.last_attempt }}
+                <div class="sched">
+                  <span class="label">Tried</span>
+                  <span class="v">{{ r.last_attempt }}</span>
+                </div>
               {% else %}
-                &mdash;
+                <span class="meta">&mdash;</span>
               {% endif %}
             </td>
-            <td>
+            <td data-label="Actions">
               <div class="row-actions">
                 {% if r.req.status == 'pending' %}
                   <form class="inline" method="post" action="{{ url_for('attempt', request_id=r.req.id) }}">
@@ -425,6 +526,22 @@ def _num(value):
     return int(number) if number.is_integer() else round(number, 2)
 
 
+def _countdown(dt, now):
+    """A countdown reads better than a timestamp for something imminent:
+    '14m', '3h 06m', '2d 4h'."""
+    seconds = (dt - now).total_seconds()
+    if seconds <= 0:
+        return "Due now"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes:02d}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h"
+
+
 @app.route("/")
 def index():
     now = datetime.now()
@@ -437,12 +554,18 @@ def index():
                 "date_label": _fmt_date(req.get("date")),
                 "window": _num(req.get("window_hours")),
                 "interval": _num(req.get("retry_interval_hours")),
-                "next_attempt": _fmt(timing.next_attempt_at(req, now)),
+                "next_in": _countdown(timing.next_attempt_at(req, now), now),
                 "deadline": _fmt(timing.deadline(req)),
                 "last_attempt": _fmt(datetime.fromisoformat(last)) if last else None,
             }
         )
-    return render_template_string(TEMPLATE, rows=rows)
+
+    return render_template_string(
+        TEMPLATE,
+        rows=rows,
+        total=len(rows),
+        pending=sum(1 for row in rows if row["req"].get("status") == "pending"),
+    )
 
 
 @app.route("/add", methods=["POST"])
