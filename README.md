@@ -42,15 +42,6 @@ Python 3.11, Selenium 4 driving real Chrome, Flask for the local UI, python-dote
 config, and smtplib for Gmail alerts. Scheduling is plain cron. No database, the queue
 is a JSON file.
 
-## Data
-
-There is no dataset. The only state is three local files, all gitignored:
-
-- `requests.json`, the queue of booking requests and their status
-- `.env`, Resy login and Gmail app password
-- `.chrome-profile/`, a persistent Chrome profile that keeps the Resy session alive
-  between runs so the bot does not log in every cycle
-
 ## Setup
 
 ```bash
@@ -76,7 +67,9 @@ RECEIVER_EMAIL=where_alerts_should_go
 # WEB_PORT=5001
 ```
 
-Run the poller once by hand first so Chrome logs in and saves the session.
+Run the poller once by hand first so Chrome logs in and saves the session to
+`.chrome-profile/`. Later runs reuse it and skip the login. That folder, `.env` and
+`requests.json` are all gitignored.
 
 ## Usage
 
@@ -149,7 +142,3 @@ with whatever is saved. It needs a machine that is awake with Chrome installed, 
 is a laptop or home server tool, not something that runs in the cloud as written.
 Everything depends on Resy's page markup, so a redesign will break it. The failure mode
 is a run that refuses to book and tells you, rather than one that books the wrong thing.
-
-## License
-
-MIT.
