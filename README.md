@@ -102,27 +102,6 @@ python resy_bot.py --restaurant-url "https://resy.com/cities/new-york-ny/venues/
 You get an email when a booking lands, and when an attempt fails for a real reason.
 Routine "nothing available yet" attempts stay quiet.
 
-## Known Issues
-
-Resy's booking widget is the fragile part, so the bot is deliberate about what counts
-as success. After clicking Reserve Now there are four outcomes:
-
-| What Resy does | Result |
-| --- | --- |
-| Shows a confirmation, even briefly | Booked |
-| Leaves checkout or closes with no error | Booked, flagged unconfirmed in the email |
-| Shows an error, table gone or card needed | Not booked, retries next cycle, no email |
-| Sits on the checkout screen | Not booked, emails you what the widget showed |
-
-The unconfirmed case is normal, not a bug. Resy tears the widget down the moment a
-reservation is placed, so there is often nothing left to read. It books, and the email
-tells you to glance at your account.
-
-Two other things worth knowing. A CAPTCHA can appear on login, which the persistent
-Chrome profile mostly avoids but cannot rule out. And on macOS, cron needs Full Disk
-or Automation permission to launch Chrome, so run the poller once in Terminal and
-grant the prompt before trusting the schedule.
-
 ## Future Steps
 
 - Text or push alerts instead of just email
@@ -137,8 +116,23 @@ work. OpenTable sits behind Akamai bot management that blocks the automated brow
 before any booking logic runs, and its login can fall back to a one-time emailed code
 that a bot cannot read. Resy has neither problem.
 
-The bot also assumes a payment card is already on file with Resy, since it confirms
-with whatever is saved. It needs a machine that is awake with Chrome installed, so it
-is a laptop or home server tool, not something that runs in the cloud as written.
-Everything depends on Resy's page markup, so a redesign will break it. The failure mode
-is a run that refuses to book and tells you, rather than one that books the wrong thing.
+It assumes a payment card is already on file with Resy, since it confirms with whatever
+is saved. It needs a machine that is awake with Chrome installed, so it is a laptop or
+home server tool, not something that runs in the cloud as written. A CAPTCHA can still
+appear on login, which the persistent Chrome profile mostly avoids but cannot rule out.
+On macOS, cron needs Full Disk or Automation permission to launch Chrome, so run the
+poller once in Terminal and grant the prompt before trusting the schedule.
+
+Everything depends on Resy's page markup, so a redesign will break it. That is why the
+bot is careful about what counts as success. After clicking Reserve Now:
+
+| What Resy does | Result |
+| --- | --- |
+| Shows a confirmation, even briefly | Booked |
+| Leaves checkout or closes with no error | Booked, flagged unconfirmed in the email |
+| Shows an error, table gone or card needed | Not booked, retries next cycle, no email |
+| Sits on the checkout screen | Not booked, emails you what the widget showed |
+
+The unconfirmed case is normal, not a bug. Resy tears the widget down the moment a
+reservation is placed, so there is often nothing left to read. It books, and the email
+tells you to glance at your account.
