@@ -1,8 +1,11 @@
-# Reservation Bot (Resy + OpenTable)
+# Resy Bot
 
 Queue restaurant reservations from a small local web page, and let a cron-driven
-poller book them automatically on **Resy** or **OpenTable** — whether the table
-is already open (grab it now / catch cancellations) or drops in the future.
+poller book them automatically on **Resy** — whether the table is already open
+(grab it now / catch cancellations) or drops in the future.
+
+**Resy only.** OpenTable is not supported; see
+[Limitations](#limitations) for why.
 
 For each request you set:
 
@@ -29,7 +32,6 @@ bot/
   providers/
     base.py        BookingProvider interface
     resy.py        Resy flow
-    opentable.py   OpenTable flow
   web.py           local web UI (add/view/cancel/try-now)
   poller.py        cron entrypoint — attempts all due requests
 resy_bot.py        legacy one-off CLI (still works)
@@ -60,10 +62,6 @@ You also need Google Chrome installed (Selenium 4 auto-manages the driver).
 RESY_EMAIL=your_resy_login_email
 RESY_PASSWORD=your_resy_password
 
-# OpenTable login
-OPENTABLE_EMAIL=your_opentable_email
-OPENTABLE_PASSWORD=your_opentable_password
-
 # Gmail alerts (use a Gmail App Password: https://myaccount.google.com/apppasswords)
 SENDER_EMAIL=your_gmail_email
 SENDER_PASSWORD=your_16_character_app_password
@@ -71,15 +69,16 @@ RECEIVER_EMAIL=recipient_email_for_alerts
 
 # Optional
 # HEADLESS=1                 # run Chrome headless in the poller
+# USE_UNDETECTED=1           # route Chrome through undetected-chromedriver
 # WEB_PORT=5001
 ```
 
 `.env`, `requests.json`, and the Chrome profile are gitignored.
 
-> **First run:** launch the poller (or the CLI) once so Chrome logs into Resy /
-> OpenTable using your credentials. The login is saved in the persistent Chrome
-> profile (`.chrome-profile/`), so later runs skip login and are less likely to
-> hit a CAPTCHA.
+> **First run:** launch the poller (or the CLI) once so Chrome logs into Resy
+> using your credentials. The login is saved in the persistent Chrome profile
+> (`.chrome-profile/`), so later runs skip login and are less likely to hit a
+> CAPTCHA.
 
 ---
 
@@ -91,10 +90,21 @@ RECEIVER_EMAIL=recipient_email_for_alerts
 python -m bot.web
 ```
 
-Open **http://127.0.0.1:5001**, fill in the form (platform, restaurant name +
-URL, date, guests, desired time, window, optional start time, retry interval,
+Open **http://127.0.0.1:5001**, fill in the form (restaurant URL, date, guests,
+desired time, window, optional start time, retry interval,
 run-until-reservation), and click **Add request**. From the table you can
 **Try now**, **Cancel**, or **Delete** any request.
+
+**Restaurant name is optional and is only a label** — it appears in the table,
+the logs, and the alert email's subject, and never touches the booking itself.
+The **URL** is what identifies the restaurant. Leave the name blank and it's
+inferred from the URL slug (`.../venues/the-duck-inn` → "The Duck Inn"); fill it
+in only when you want a tidier label.
+
+When a booking succeeds, the alert email links to **the reservation** — the
+confirmation page if the provider redirected to one, otherwise your account's
+reservations page — plus the confirmation number when one is on the page. The
+same link shows up as *view reservation* in the table.
 
 ### Run the poller
 
@@ -141,13 +151,71 @@ Check it: `crontab -l` · Watch it: `tail -f cron.log` · Remove it:
 
 ---
 
-## Notes & caveats
+## Limitations
 
-- **OpenTable** has stronger bot detection and its page markup changes often. The
-  flow lives entirely in `bot/providers/opentable.py` with verbose logging and
-  fallback selectors, so it's easy to re-tune. If plain Selenium gets blocked,
-  `pip install undetected-chromedriver` and swap it into `bot/driver.make_driver`.
+### OpenTable is not supported
+
+Support was written and then removed, because it could not be made to work
+reliably. Two independent blockers, either one sufficient:
+
+**The browser is blocked before any booking logic runs.** OpenTable sits behind
+Akamai bot management, which fingerprints the *browser*, not the IP. The same
+machine that loads opentable.com fine in ordinary Chrome gets a bare
+`Access Denied` page in a Selenium-driven one, so every attempt failed at the
+first page load. The usual mitigations — stripping automation flags, a real user
+agent, undetected-chromedriver, a hand-warmed Chrome profile — are an arms race
+against a vendor whose job is to win it, and the failure mode is silent and
+sudden.
+
+**Sign-in can't be automated even when the page loads.** OpenTable's login is
+two-step: you submit an email, and only then does it decide between showing a
+password field and emailing you a one-time code. A bot cannot read that code.
+Guest booking sidesteps the account but still requires clearing the same bot
+wall, and it can't see or manage reservations afterward.
+
+Resy has neither problem: it accepts Selenium, and it takes an email/password
+login that persists in the Chrome profile. If you want OpenTable reservations,
+book them by hand.
+
+### Other caveats
+
 - **CAPTCHA** on login can still appear; the persistent Chrome profile minimizes
   re-logins. If a run hits one, the poller emails you and retries next cycle.
-- **Payment info** must already be saved on your Resy / OpenTable account — the
-  bot confirms with whatever card is on file.
+- **Payment info** must already be saved on your Resy account — the bot confirms
+  with whatever card is on file.
+
+---
+
+## What the bot verifies before claiming success
+
+Both of these exist because earlier versions reported bookings that hadn't
+happened, or had happened on the wrong day. The rule now is that nothing is
+reported as booked unless Resy says so.
+
+- **The date is checked twice.** Resy's date picker can silently fail to take,
+  leaving the page showing another day's availability — which is how the bot
+  once booked the wrong date. The date now goes through the URL (`?date=&seats=`),
+  is read back off the date selector, and is checked again in the booking summary
+  immediately before confirming. A contradiction aborts the attempt.
+- **The booking is confirmed against Resy's own response.** The old flow clicked
+  "Reserve Now", slept, and declared victory — so an attempt that stalled on a
+  confirmation modal, or that Resy rejected, was still emailed to you as booked.
+  There are now four outcomes:
+
+  | What Resy does | Result |
+  | --- | --- |
+  | Shows a confirmation, even briefly | **Booked** |
+  | Leaves checkout or closes, with no error | **Booked (unconfirmed)** — Resy dismisses the widget once a reservation is placed, so this is a real booking; the email flags it for a glance |
+  | Shows an error (table gone, card needed) | Not booked, retries next cycle, no email |
+  | Sits on the checkout screen saying nothing | Not booked, emails you what the widget showed |
+
+  Getting this right took three passes, because the widget is a moving target.
+  It is torn down on success, which leaves the bot reading the venue page
+  underneath; and the confirmation can flash by in under a second before being
+  replaced by another screen. So the widget is sampled several times a second
+  and judged on the **whole transcript** rather than whatever is on screen when
+  the clock runs out. Every distinct screen is printed to the log, so a run that
+  still gets it wrong can be diagnosed from `cron.log`.
+
+If Resy's markup changes, the worst case is a run that refuses to book and tells
+you — not one that books the wrong thing or lies about it.

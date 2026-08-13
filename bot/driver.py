@@ -1,8 +1,18 @@
 """Shared Selenium Chrome setup and common page helpers.
 
-A persistent user-data-dir keeps you logged into Resy/OpenTable between runs and
-reduces bot-detection friction, so the poller usually doesn't have to re-enter
+A persistent user-data-dir keeps you logged into Resy between runs and reduces
+bot-detection friction, so the poller usually doesn't have to re-enter
 credentials or solve a CAPTCHA every cycle.
+
+Booking sites fingerprint the browser rather than the IP, so the same machine
+that loads a site fine in normal Chrome can be blocked in a Selenium-driven one.
+`make_driver` therefore strips the automation tells it can (notably the
+AutomationControlled blink feature, which Chrome advertises by default under
+Selenium) and can hand the whole job to undetected-chromedriver when installed:
+
+    pip install undetected-chromedriver
+    # then in .env
+    USE_UNDETECTED=1
 """
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -13,26 +23,74 @@ from selenium.common.exceptions import TimeoutException
 
 from . import config
 
+# A current desktop UA; the default under headless Chrome says "HeadlessChrome",
+# which is an instant tell.
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
+)
 
-def make_driver(headless=None):
-    """Create a Chrome WebDriver using the persistent profile."""
-    if headless is None:
-        headless = config.HEADLESS
 
-    options = Options()
+def _common_arguments(options, headless):
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1400,1000")
+    # The big one: without this, Chrome under Selenium advertises itself as
+    # automation-controlled, which is what bot-detection edges look for.
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--disable-infobars")
+    options.add_argument(f"--user-agent={USER_AGENT}")
     # Persist cookies/session across runs.
     config.CHROME_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     options.add_argument(f"--user-data-dir={config.CHROME_PROFILE_DIR}")
-    # Trim the most obvious automation fingerprints.
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
     if headless:
         options.add_argument("--headless=new")
+    return options
+
+
+def make_driver(headless=None):
+    """Create a Chrome WebDriver using the persistent profile.
+
+    Uses undetected-chromedriver when USE_UNDETECTED=1 and the package is
+    installed, falling back to plain Selenium (with a warning) otherwise.
+    """
+    if headless is None:
+        headless = config.HEADLESS
+
+    if config.USE_UNDETECTED:
+        driver = _make_undetected_driver(headless)
+        if driver is not None:
+            return driver
+
+    options = _common_arguments(Options(), headless)
+    # Trim the remaining obvious automation fingerprints.
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
 
     driver = webdriver.Chrome(options=options)
+    _hide_webdriver_flag(driver)
+    return driver
+
+
+def _make_undetected_driver(headless):
+    """Return an undetected-chromedriver instance, or None if unavailable."""
+    try:
+        import undetected_chromedriver as uc
+    except ImportError:
+        print(
+            "[driver] USE_UNDETECTED=1 but undetected-chromedriver isn't installed "
+            "(pip install undetected-chromedriver); using plain Selenium."
+        )
+        return None
+
+    print("[driver] Using undetected-chromedriver.")
+    options = _common_arguments(uc.ChromeOptions(), headless)
+    driver = uc.Chrome(options=options, headless=headless)
+    _hide_webdriver_flag(driver)
+    return driver
+
+
+def _hide_webdriver_flag(driver):
     try:
         driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
@@ -40,7 +98,6 @@ def make_driver(headless=None):
         )
     except Exception:  # noqa: BLE001 - CDP not fatal
         pass
-    return driver
 
 
 def close_modal_if_present(driver, timeout=5):

@@ -20,7 +20,15 @@ def _attempt(request):
     label = f"{request['platform']}:{request['restaurant_name']} {request['date']} {request['desired_time']}"
     print(f"[poller] Attempting {label} (attempt #{request.get('attempts', 0) + 1})")
 
-    provider = get_provider(request["platform"])
+    try:
+        provider = get_provider(request["platform"])
+    except ValueError:
+        # e.g. an OpenTable request queued before that platform was removed.
+        # Retire it rather than crashing every later request in the cycle.
+        store.update(rid, status="cancelled", last_error=f"Unsupported platform: {request['platform']}")
+        print(f"[poller] Cancelled {rid} — unsupported platform {request['platform']!r}")
+        return None
+
     result = provider.book(request)
 
     now = datetime.now().isoformat(timespec="seconds")
@@ -32,13 +40,27 @@ def _attempt(request):
             last_error=None,
             attempts=request.get("attempts", 0) + 1,
             booked_slot=result.slot,
+            confirmation_url=result.confirmation_url,
+            confirmation_code=result.confirmation_code,
+            verified=result.verified,
         )
-        notify.send_alert(
-            f"✅ Booked — {request['restaurant_name']}",
+        body = (
             f"Reserved {request['restaurant_name']} ({request['platform']}) for "
             f"{request['guests']} at {result.slot} on {request['date']}.\n"
-            f"URL: {request['restaurant_url']}",
         )
+        if result.confirmation_code:
+            body += f"Confirmation: {result.confirmation_code}\n"
+        # Link to the reservation itself, not the restaurant's listing page.
+        body += f"Your reservation: {result.confirmation_url}\n"
+        if not result.verified:
+            body += (
+                "\nNote: Resy closed its booking widget without printing a "
+                "confirmation, which is what it does once a reservation is "
+                "placed — but it was not confirmed in words. Worth a glance at "
+                "your Resy account.\n"
+            )
+        subject = "✅ Booked" if result.verified else "✅ Booked (unconfirmed)"
+        notify.send_alert(f"{subject} — {request['restaurant_name']}", body)
         print(f"[poller] BOOKED {label} at {result.slot}")
     else:
         store.update(

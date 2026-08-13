@@ -1,11 +1,13 @@
-"""Booking providers (Resy, OpenTable) behind a common interface."""
+"""Booking providers behind a common interface.
+
+Resy is the only supported platform; see the README's limitations section for
+why OpenTable was removed.
+"""
 from .base import BookingProvider, BookingResult
 from .resy import ResyProvider
-from .opentable import OpenTableProvider
 
 PROVIDERS = {
     "resy": ResyProvider,
-    "opentable": OpenTableProvider,
 }
 
 
@@ -21,7 +23,6 @@ __all__ = [
     "BookingProvider",
     "BookingResult",
     "ResyProvider",
-    "OpenTableProvider",
     "PROVIDERS",
     "get_provider",
 ]

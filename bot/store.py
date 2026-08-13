@@ -9,11 +9,28 @@ import json
 import uuid
 from contextlib import contextmanager
 from datetime import datetime
+from urllib.parse import urlparse
 
 from . import config
 
-VALID_PLATFORMS = ("resy", "opentable")
+VALID_PLATFORMS = ("resy",)
 VALID_STATUSES = ("pending", "booked", "failed", "expired", "cancelled")
+
+
+def name_from_url(restaurant_url):
+    """Best-effort restaurant name from a listing URL's slug.
+
+    The name is only ever a label (logs, the UI table, email subjects) — the URL
+    is what actually drives the booking — so it's fine to infer one when the
+    field is left blank.
+
+        .../venues/the-duck-inn  ->  "The Duck Inn"
+        .../r/avec-chicago       ->  "Avec Chicago"
+    """
+    path = urlparse(restaurant_url or "").path.rstrip("/")
+    slug = path.rsplit("/", 1)[-1] if path else ""
+    pretty = slug.replace("-", " ").replace("_", " ").strip()
+    return pretty.title() if pretty else "Untitled restaurant"
 
 
 @contextmanager
@@ -49,11 +66,11 @@ def _write(requests):
 
 def new_request(
     platform,
-    restaurant_name,
     restaurant_url,
     date,
     guests,
     desired_time,
+    restaurant_name=None,
     window_hours=config.DEFAULT_WINDOW_HOURS,
     start_time=None,
     retry_interval_hours=config.DEFAULT_RETRY_INTERVAL_HOURS,
@@ -61,12 +78,17 @@ def new_request(
 ):
     """Build a request dict with defaults, a fresh id, and a created_at stamp.
 
-    Raises ValueError on invalid platform/date so bad input is rejected at the
-    web layer rather than surfacing later in the poller.
+    `restaurant_name` is optional and purely a label; when blank it's inferred
+    from the URL slug. Raises ValueError on invalid platform/date so bad input
+    is rejected at the web layer rather than surfacing later in the poller.
     """
     platform = (platform or "").strip().lower()
     if platform not in VALID_PLATFORMS:
         raise ValueError(f"platform must be one of {VALID_PLATFORMS}")
+
+    restaurant_url = (restaurant_url or "").strip()
+    if not restaurant_url:
+        raise ValueError("restaurant_url is required")
 
     # Validate date format early.
     datetime.strptime(date, "%Y-%m-%d")
@@ -74,8 +96,8 @@ def new_request(
     return {
         "id": uuid.uuid4().hex,
         "platform": platform,
-        "restaurant_name": restaurant_name.strip(),
-        "restaurant_url": restaurant_url.strip(),
+        "restaurant_name": (restaurant_name or "").strip() or name_from_url(restaurant_url),
+        "restaurant_url": restaurant_url,
         "date": date,
         "guests": int(guests),
         "desired_time": desired_time.strip(),
@@ -87,6 +109,10 @@ def new_request(
         "attempts": 0,
         "last_attempt": None,
         "last_error": None,
+        "booked_slot": None,
+        "confirmation_url": None,
+        "confirmation_code": None,
+        "verified": None,
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
 

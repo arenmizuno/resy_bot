@@ -1,5 +1,5 @@
 selenium>=4.0.0
 python-dotenv
 flask>=3.0.0
-# Optional fallback if OpenTable/Resy start blocking plain Selenium:
+# Optional fallback if Resy starts blocking plain Selenium (set USE_UNDETECTED=1):
 # undetected-chromedriver

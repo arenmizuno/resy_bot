@@ -17,10 +17,25 @@ class BookingResult:
     slot: Optional[str] = None       # the time actually booked, e.g. "7:15 PM"
     error: Optional[str] = None      # human-readable reason when not booked
     no_availability: bool = False    # True = nothing in window yet (soft, retry)
+    # Link to the reservation itself (confirmation page, or the account's
+    # upcoming-reservations page as a fallback) — this is what the alert email
+    # sends you to, not the restaurant's listing.
+    confirmation_url: Optional[str] = None
+    confirmation_code: Optional[str] = None
+    # False when the reservation was almost certainly placed but the provider
+    # never said so in words (e.g. Resy dismisses its booking widget on
+    # success). Still a booking — just one worth eyeballing.
+    verified: bool = True
 
     @classmethod
-    def booked(cls, slot):
-        return cls(success=True, slot=slot)
+    def booked(cls, slot, confirmation_url=None, confirmation_code=None, verified=True):
+        return cls(
+            success=True,
+            slot=slot,
+            confirmation_url=confirmation_url,
+            confirmation_code=confirmation_code,
+            verified=verified,
+        )
 
     @classmethod
     def unavailable(cls, message="No slots available within the desired window."):

@@ -52,22 +52,15 @@ TEMPLATE = """
 </head>
 <body>
 <div class="wrap">
-  <h1>🍽️ Reservation Bot</h1>
-  <p class="sub">Queue a Resy or OpenTable booking. The poller starts at your <b>start time</b> (or immediately if blank),
+  <h1>🍽️ Resy Bot</h1>
+  <p class="sub">Queue a Resy booking. The poller starts at your <b>start time</b> (or immediately if blank),
      retries every <b>retry interval</b> hours, books any slot within <b>± window</b> of your time, and stops
      2 days before the reservation unless you check <b>run until reservation</b>.</p>
 
   <div class="card">
     <form method="post" action="{{ url_for('add') }}">
       <div class="grid">
-        <div>
-          <label>Platform</label>
-          <select name="platform">
-            <option value="resy">Resy</option>
-            <option value="opentable">OpenTable</option>
-          </select>
-        </div>
-        <div><label>Restaurant name</label><input name="restaurant_name" required placeholder="The Duck Inn"></div>
+        <div><label>Restaurant name <span class="muted">(label only, optional)</span></label><input name="restaurant_name" placeholder="auto-filled from the URL"></div>
         <div><label>Guests</label><input name="guests" type="number" min="1" value="2" required></div>
       </div>
       <label>Restaurant URL</label>
@@ -106,7 +99,10 @@ TEMPLATE = """
             {% if r.req.last_error %}<br><span class="muted">last: {{ r.req.last_error[:70] }}</span>{% endif %}
           </td>
           <td>{{ r.req.date }}<br><span class="muted">{{ r.req.desired_time }}</span>
-              {% if r.req.booked_slot %}<br><b>booked {{ r.req.booked_slot }}</b>{% endif %}</td>
+              {% if r.req.booked_slot %}<br><b>booked {{ r.req.booked_slot }}</b>
+                {% if r.req.verified is false %}<br><span class="muted">unconfirmed — check Resy</span>{% endif %}
+                {% if r.req.confirmation_url %}<br><a href="{{ r.req.confirmation_url }}" target="_blank" rel="noopener">view reservation</a>{% endif %}
+              {% endif %}</td>
           <td>{{ r.req.guests }}</td>
           <td><span class="tag {{ r.req.status }}">{{ r.req.status }}</span></td>
           <td>{{ r.req.attempts }}</td>
@@ -162,8 +158,8 @@ def add():
     f = request.form
     try:
         req = new_request(
-            platform=f.get("platform"),
-            restaurant_name=f.get("restaurant_name"),
+            platform="resy",
+            restaurant_name=f.get("restaurant_name") or None,
             restaurant_url=f.get("restaurant_url"),
             date=f.get("date"),
             guests=f.get("guests"),
